@@ -18,7 +18,7 @@ import org.springframework.stereotype.Component;
 public class Tokens {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private Integer id;
+    private int id;
     private String token;
-    private Integer userid;
+    private int userid;
 }

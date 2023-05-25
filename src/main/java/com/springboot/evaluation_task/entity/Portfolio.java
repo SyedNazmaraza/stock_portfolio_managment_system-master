@@ -18,10 +18,10 @@ public class Portfolio {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-    private Integer id;
-    private  Integer userId;
+    private int id;
+    private  int userId;
     private String symbol;
-    private double purchasePrice;
+    private int purchasePrice;
     private String purchaseDate;
-    private Integer quantity;
+    private int quantity;
 }

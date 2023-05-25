@@ -19,14 +19,14 @@ public class Transactions {
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
 
-    private Integer id;
-    private  Integer userId;
+    private int id;
+    private  int userId;
     private String symbol;
     private String transactionType;
     private String transactionDate;
-    private Integer quantity;
+    private int quantity;
 
-    private double transactionPrice;
+    private int transactionPrice;
 
 
 }

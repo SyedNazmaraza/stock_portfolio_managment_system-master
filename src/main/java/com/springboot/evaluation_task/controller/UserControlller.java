@@ -2,10 +2,12 @@ package com.springboot.evaluation_task.controller;
 
 import com.springboot.evaluation_task.entity.Portfolio;
 import com.springboot.evaluation_task.entity.Transactions;
-import com.springboot.evaluation_task.entity.User;
 import com.springboot.evaluation_task.model.*;
 import com.springboot.evaluation_task.service.UserService;
+import jakarta.validation.Valid;
 import lombok.AllArgsConstructor;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -18,27 +20,28 @@ public class UserControlller {
     private  final UserService service;
 
     @PostMapping("/login")
-    public String login(@RequestBody User user){
-        return service.login(user);
+    public ResponseEntity<String> login(@RequestBody @Valid UserRequest userRequest){
+        return new ResponseEntity<>(service.login(userRequest), HttpStatus.CREATED);
     }
     @PostMapping("/portfolio/buy")
-    public String buyStocks(@RequestBody Buy buy){
-        return service.buyPortfolio(buy);
+    public ResponseEntity<String> buyStocks(@RequestBody @Valid PortfolioRequest portfolioRequest){
+        return new ResponseEntity<>(service.buyPortfolio(portfolioRequest), HttpStatus.CREATED);
     }
     @PostMapping("/portfolio/sell")
-    public String sellStocks(@RequestBody Sell sell){
-        return service.sellPortfolio(sell);
+    public ResponseEntity<String> sellStocks(@RequestBody @Valid PortfolioRequest portfolioRequest){
+        return  ResponseEntity.ok(service.sellPortfolio(portfolioRequest));
+
     }
     @GetMapping("/portfolio")
-    public List<Portfolio> getAllPortfolio(@RequestBody Buy buy){
-        return service.getAllPortfolio(buy);
+    public List<Portfolio> getAllPortfolio(@RequestBody @Valid PortfolioRequest portfolioRequest){
+        return service.getAllPortfolio(portfolioRequest);
     }
     @GetMapping("/transaction/list")
-    public  List<Transactions> getAllTransaction(@RequestBody SourceToken token) {
+    public  List<Transactions> getAllTransaction(@RequestBody @Valid SourceTokenRequest token) {
         return service.getAllTransaction(token);
     }
     @GetMapping("/portfolio/pl/{price}")
-    public HashMap<String, TotalValues> findingPl(@RequestBody SourceToken token, @PathVariable("price") Integer price){
+    public HashMap<String, TotalValuesResponse> findingPl(@RequestBody @Valid SourceTokenRequest token, @PathVariable("price") Integer price){
         return service.findProfitOrLoss(token,price);
     }
 

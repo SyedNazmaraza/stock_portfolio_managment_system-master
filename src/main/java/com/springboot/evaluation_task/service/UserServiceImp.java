@@ -19,7 +19,7 @@ import org.springframework.stereotype.Service;
 import java.util.HashMap;
 import java.util.List;
 import java.util.UUID;
-import java.util.stream.Collectors;
+
 
 @Service
 @AllArgsConstructor
@@ -31,9 +31,11 @@ public class UserServiceImp implements UserService {
     private final PortfolioRepository portfolioRepository;
     private final PasswordEncoder passwordEncoder;
     @Override
-    public String login(User user) {
-        String s = user.getPassword();
-        user.setPassword(passwordEncoder.encode(s));
+    public String login(UserRequest userRequest) {
+        User user = User.builder()
+                .userName(userRequest.getUserName())
+                .password(passwordEncoder.encode(userRequest.getPassword()))
+                .build();
         userRepository.save(user);
         String token = UUID.randomUUID().toString();
         Tokens t = Tokens.builder()
@@ -45,24 +47,24 @@ public class UserServiceImp implements UserService {
     }
 
     @Override
-    public String buyPortfolio(Buy buy) {
+    public String buyPortfolio(PortfolioRequest portfolioRequest) {
         try {
-            Integer id = tokenRepository.findByToken(buy.getToken()).getUserid();
+            int id = tokenRepository.findByToken(portfolioRequest.getToken()).getUserid();
             Portfolio p = Portfolio.builder()
                     .userId(id)
-                    .quantity(buy.getQuantity())
-                    .purchaseDate(buy.getPurchaseDate())
-                    .purchasePrice(buy.getPurchasePrice())
-                    .symbol(buy.getSymbol())
+                    .quantity(portfolioRequest.getQuantity())
+                    .purchaseDate(portfolioRequest.getPurchaseDate())
+                    .purchasePrice(portfolioRequest.getPurchasePrice())
+                    .symbol(portfolioRequest.getSymbol())
                     .build();
             portfolioRepository.save(p);
             Transactions transactions = Transactions.builder()
                     .userId(id)
-                    .symbol(buy.getSymbol())
-                    .transactionPrice(buy.getPurchasePrice())
+                    .symbol(portfolioRequest.getSymbol())
+                    .transactionPrice(portfolioRequest.getPurchasePrice())
                     .transactionType("Buy")
-                    .transactionDate(buy.getPurchaseDate())
-                    .quantity(buy.getQuantity())
+                    .transactionDate(portfolioRequest.getPurchaseDate())
+                    .quantity(portfolioRequest.getQuantity())
                     .build();
             transactionRepo.save(transactions);
             return "Success";
@@ -72,79 +74,78 @@ public class UserServiceImp implements UserService {
         }
     }
     @Override
-    public String sellPortfolio(Sell sell) {
-        int quality = sell.getQuantity();
-        Integer id;
+    public String sellPortfolio(PortfolioRequest portfolioRequest) {
+        int quantity = portfolioRequest.getQuantity();
+        int id;
         try {
-             id = tokenRepository.findByToken(sell.getToken()).getUserid();
-            log.info(id.toString());
-            List<Portfolio> list = portfolioRepository.findByUserIdAndSymbolOrderByPurchasePriceAsc(id,sell.getSymbol());
-            int totalQuantity = list.stream().collect(Collectors.summingInt(Portfolio::getQuantity));
-            if(totalQuantity<quality){
+             id = tokenRepository.findByToken(portfolioRequest.getToken()).getUserid();
+            List<Portfolio> list = portfolioRepository.findByUserIdAndSymbolOrderByPurchasePriceAsc(id,portfolioRequest.getSymbol());
+            int totalQuantity = list.stream().mapToInt(Portfolio::getQuantity).sum();
+            if(totalQuantity<quantity){
                 throw new InvalidToken("LESS QUANTITY");
             }
             else {
                 for (Portfolio i : list){
-                    if(i.getQuantity()<quality){
+                    if(i.getQuantity()<quantity){
                         portfolioRepository.delete(i);
-                        quality=quality-i.getQuantity();
-                    } else if (i.getQuantity()==quality) {
+                        quantity=quantity-i.getQuantity();
+                    } else if (i.getQuantity()==quantity) {
                         portfolioRepository.delete(i);
                         break;
                     }else {
-                        i.setQuantity(i.getQuantity()-quality);
+                        i.setQuantity(i.getQuantity()-quantity);
                         portfolioRepository.save(i);
                         break;
                     }
                 }
                 Transactions transactions = Transactions.builder()
                         .userId(id)
-                        .symbol(sell.getSymbol())
-                        .transactionPrice(sell.getPurchasePrice())
+                        .symbol(portfolioRequest.getSymbol())
+                        .transactionPrice(portfolioRequest.getPurchasePrice())
                         .transactionType("SELL")
-                        .transactionDate(sell.getPurchaseDate())
-                        .quantity(sell.getQuantity())
+                        .transactionDate(portfolioRequest.getPurchaseDate())
+                        .quantity(portfolioRequest.getQuantity())
                         .build();
                 transactionRepo.save(transactions);
-                return "Sucess";
+                return "Success";
             }
         }
-        catch (NullPointerException e){
+        catch (Exception e){
             throw new InvalidToken("Invalid Token");
         }
 
     }
 
     @Override
-    public List<Portfolio> getAllPortfolio(Buy buy) {
-        Integer id = tokenRepository.findByToken(buy.getToken()).getUserid();
+    public List<Portfolio> getAllPortfolio(PortfolioRequest portfolioRequest) {
+        int id = tokenRepository.findByToken(portfolioRequest.getToken()).getUserid();
         return portfolioRepository.findByUserId(id);
     }
     @Override
-    public List<Transactions> getAllTransaction(SourceToken token) {
-        Integer id = tokenRepository.findByToken(token.getToken()).getUserid();
+    public List<Transactions> getAllTransaction(SourceTokenRequest token) {
+        int id = tokenRepository.findByToken(token.getToken()).getUserid();
         return transactionRepo.findByUserId(id);
     }
     @Override
-    public HashMap<String, TotalValues> findProfitOrLoss(SourceToken token, Integer price) {
-        HashMap<String, TotalValues> map = new HashMap<>();
-        Integer id = tokenRepository.findByToken(token.getToken()).getUserid();
+    public HashMap<String, TotalValuesResponse> findProfitOrLoss(SourceTokenRequest token, int price) {
+        HashMap<String, TotalValuesResponse> map = new HashMap<>();
+        int id = tokenRepository.findByToken(token.getToken()).getUserid();
         List<Portfolio> list = portfolioRepository.findByUserId(id);
         for(Portfolio i : list){
             if(map.containsKey(i.getSymbol())){
 
-                TotalValues totalValues = map.get(i.getSymbol());
-                totalValues.setTotalQuantity(totalValues.getTotalQuantity()+i.getQuantity());
-                totalValues.setTotalPrice((int) (totalValues.getTotalPrice()+i.getPurchasePrice()));
+                TotalValuesResponse totalValuesResponse = map.get(i.getSymbol());
+                totalValuesResponse.setTotalQuantity(totalValuesResponse.getTotalQuantity()+i.getQuantity());
+                totalValuesResponse.setTotalPrice((totalValuesResponse.getTotalPrice()+i.getPurchasePrice()));
 
-                Caluclator c = caluclatePorLAmount((Integer) price, totalValues.getTotalPrice(),totalValues.getTotalQuantity());
-                totalValues.setPrlAmount(c.getAmount());
-                totalValues.setProfitOrLoss(c.getPOrLoss());
-                map.put(i.getSymbol(),totalValues);
+                Caluclator c = caluclatePorLAmount(price, totalValuesResponse.getTotalPrice(), totalValuesResponse.getTotalQuantity());
+                totalValuesResponse.setPrlAmount(c.getAmount());
+                totalValuesResponse.setProfitOrLoss(c.getPOrLoss());
+                map.put(i.getSymbol(), totalValuesResponse);
             } else {
-                Caluclator c = caluclatePorLAmount((Integer) price, (int) i.getPurchasePrice(),i.getQuantity());
-                TotalValues totalValues = new TotalValues((Integer) i.getQuantity(), (int) i.getPurchasePrice(),c.getPOrLoss(),c.getAmount());
-                map.put(i.getSymbol(),totalValues);
+                Caluclator c = caluclatePorLAmount( price,  i.getPurchasePrice(),i.getQuantity());
+                TotalValuesResponse totalValuesResponse = new TotalValuesResponse( i.getQuantity(),  i.getPurchasePrice(),c.getPOrLoss(),c.getAmount());
+                map.put(i.getSymbol(), totalValuesResponse);
             }
         }
         return map;

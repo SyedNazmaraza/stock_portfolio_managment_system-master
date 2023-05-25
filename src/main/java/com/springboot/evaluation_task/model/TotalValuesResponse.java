@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 @NoArgsConstructor
 @Builder
-public class TotalValues {
+public class TotalValuesResponse {
     private int totalQuantity;
     private int totalPrice;
     private String profitOrLoss;

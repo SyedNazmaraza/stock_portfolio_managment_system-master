@@ -11,8 +11,5 @@ public interface PortfolioRepository extends JpaRepository<Portfolio,Integer> {
 
     List<Portfolio> findByUserId(Integer id);
 
-
-    List<Portfolio> findByUserIdAndSymbol(Integer id, String symbol);
-
     List<Portfolio> findByUserIdAndSymbolOrderByPurchasePriceAsc(Integer id, String symbol);
 }
