@@ -3,9 +3,7 @@ package com.springboot.evaluation_task.exception;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
-import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ResponseStatus;
-import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.HashMap;
@@ -25,8 +23,8 @@ public class ExceptionHandler {
     public Map<String,String> handleInvalidArgument(MethodArgumentNotValidException ex){
         Map<String,String> errorMap = new HashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(fieldError ->
-                            {errorMap.put(fieldError.getField(),fieldError.getDefaultMessage());} );
-        errorMap.put("status", String.valueOf(HttpStatus.BAD_REQUEST));
+                            {errorMap.put(fieldError.getField(),fieldError.getDefaultMessage());
+                                errorMap.put("Status",String.valueOf(HttpStatus.BAD_REQUEST));});
         return errorMap;
     }
 }

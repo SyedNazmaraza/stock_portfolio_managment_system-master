@@ -1,136 +1,179 @@
 package com.springboot.evaluation_task.service;
 
 
-import com.springboot.evaluation_task.entity.Portfolio;
-import com.springboot.evaluation_task.entity.Tokens;
-import com.springboot.evaluation_task.entity.Transactions;
-import com.springboot.evaluation_task.entity.User;
+import com.springboot.evaluation_task.config.JwtService;
+import com.springboot.evaluation_task.entity.*;
 import com.springboot.evaluation_task.exception.InvalidToken;
 import com.springboot.evaluation_task.model.*;
-import com.springboot.evaluation_task.repository.PortfolioRepository;
-import com.springboot.evaluation_task.repository.TokenRepository;
-import com.springboot.evaluation_task.repository.TransactionRepo;
-import com.springboot.evaluation_task.repository.UserRepository;
-import lombok.AllArgsConstructor;
+import com.springboot.evaluation_task.repository.*;
+
+import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+
+import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
 import java.util.List;
-import java.util.UUID;
 
 
 @Service
-@AllArgsConstructor
+@RequiredArgsConstructor
 @Slf4j
 public class UserServiceImp implements UserService {
-    private final UserRepository userRepository;
-    private final TokenRepository tokenRepository;
+    private final User1Repository user1Repository;
     private final TransactionRepo transactionRepo;
     private final PortfolioRepository portfolioRepository;
     private final PasswordEncoder passwordEncoder;
+    private final JwtService jwtService;
+    private final AuthenticationManager authenticationManager;
+    private final HttpServletRequest request;
+
+
+
     @Override
-    public String login(UserRequest userRequest) {
-        User user = User.builder()
-                .userName(userRequest.getUserName())
-                .password(passwordEncoder.encode(userRequest.getPassword()))
+    public String signIn(SignInRequest signInRequest) {
+        User1 user = User1.builder()
+                .userName(signInRequest.getUserName())
+                .password(passwordEncoder.encode(signInRequest.getPassword()))
+                .email(signInRequest.getEmail())
+                .role(signInRequest.getRole())
                 .build();
-        userRepository.save(user);
-        String token = UUID.randomUUID().toString();
-        Tokens t = Tokens.builder()
-                .token(token)
-                .userid(user.getId())
-                .build();
-        tokenRepository.save(t);
-        return token;
+        user1Repository.save(user);
+        var jwttoken =  jwtService.generateToken(user);
+        return jwttoken;
+    }
+    @Override
+    public String login(LoginRequest loginRequest) {
+//        authenticationManager.authenticate(
+//                new UsernamePasswordAuthenticationToken(loginRequest.getEmail(), loginRequest.getPassword()));
+        try {
+            var userName = user1Repository.findByEmail(loginRequest.getEmail());
+            var jwtToken = jwtService.generateToken(userName.get());
+            return jwtToken;
+        }
+        catch (Exception e){
+            throw new InvalidToken("Invalid Details");
+        }
     }
 
     @Override
     public String buyPortfolio(PortfolioRequest portfolioRequest) {
-        try {
-            int id = tokenRepository.findByToken(portfolioRequest.getToken()).getUserid();
-            Portfolio p = Portfolio.builder()
-                    .userId(id)
-                    .quantity(portfolioRequest.getQuantity())
-                    .purchaseDate(portfolioRequest.getPurchaseDate())
-                    .purchasePrice(portfolioRequest.getPurchasePrice())
-                    .symbol(portfolioRequest.getSymbol())
-                    .build();
-            portfolioRepository.save(p);
+        String authorizationHeader = request.getHeader("Authorization");
+        String token;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            token = authorizationHeader.substring(7);
+        }
+        else {
+            throw new InvalidToken("Invalid token");
+        }
+        String email = jwtService.extractUsername(token);
+        Integer id = user1Repository.findByEmail(email).get().getId();
+        Portfolio p = Portfolio.builder()
+                .userId(id)
+                .quantity(portfolioRequest.getQuantity())
+                .purchaseDate(portfolioRequest.getPurchaseDate())
+                .purchasePrice(portfolioRequest.getPurchasePrice())
+                .symbol(portfolioRequest.getSymbol())
+                .build();
+        portfolioRepository.save(p);
+        Transactions transactions = Transactions.builder()
+                .userId(id)
+                .symbol(portfolioRequest.getSymbol())
+                .transactionPrice(portfolioRequest.getPurchasePrice())
+                .transactionType("Buy")
+                .transactionDate(portfolioRequest.getPurchaseDate())
+                .quantity(portfolioRequest.getQuantity())
+                .build();
+        transactionRepo.save(transactions);
+        return "Success";
+
+
+    }
+    @Override
+    public String sellPortfolio(PortfolioRequest portfolioRequest) {
+        int quantity = portfolioRequest.getQuantity();
+        String authorizationHeader = request.getHeader("Authorization");
+        String token;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            token = authorizationHeader.substring(7);
+        }
+        else {
+            throw new InvalidToken("Invalid token");
+        }
+        String email = jwtService.extractUsername(token);
+        Integer id = user1Repository.findByEmail(email).get().getId();
+        List<Portfolio> list = portfolioRepository.findByUserIdAndSymbolOrderByPurchasePriceAsc(id,portfolioRequest.getSymbol());
+        int totalQuantity = list.stream().mapToInt(Portfolio::getQuantity).sum();
+        if(totalQuantity<quantity){
+            throw new InvalidToken("LESS QUANTITY");
+        }
+        else {
+            for (Portfolio i : list){
+                if(i.getQuantity()<quantity){
+                    portfolioRepository.delete(i);
+                    quantity=quantity-i.getQuantity();
+                } else if (i.getQuantity()==quantity) {
+                    portfolioRepository.delete(i);
+                    break;
+                }else {
+                    i.setQuantity(i.getQuantity()-quantity);
+                    portfolioRepository.save(i);
+
+                }
+            }
             Transactions transactions = Transactions.builder()
                     .userId(id)
                     .symbol(portfolioRequest.getSymbol())
                     .transactionPrice(portfolioRequest.getPurchasePrice())
-                    .transactionType("Buy")
+                    .transactionType("SELL")
                     .transactionDate(portfolioRequest.getPurchaseDate())
                     .quantity(portfolioRequest.getQuantity())
                     .build();
             transactionRepo.save(transactions);
             return "Success";
         }
-        catch (Exception e){
-            throw new InvalidToken("InvalidToken");
-        }
-    }
-    @Override
-    public String sellPortfolio(PortfolioRequest portfolioRequest) {
-        int quantity = portfolioRequest.getQuantity();
-        int id;
-        try {
-             id = tokenRepository.findByToken(portfolioRequest.getToken()).getUserid();
-            List<Portfolio> list = portfolioRepository.findByUserIdAndSymbolOrderByPurchasePriceAsc(id,portfolioRequest.getSymbol());
-            int totalQuantity = list.stream().mapToInt(Portfolio::getQuantity).sum();
-            if(totalQuantity<quantity){
-                throw new InvalidToken("LESS QUANTITY");
-            }
-            else {
-                for (Portfolio i : list){
-                    if(i.getQuantity()<quantity){
-                        portfolioRepository.delete(i);
-                        quantity=quantity-i.getQuantity();
-                    } else if (i.getQuantity()==quantity) {
-                        portfolioRepository.delete(i);
-                        break;
-                    }else {
-                        i.setQuantity(i.getQuantity()-quantity);
-                        portfolioRepository.save(i);
-                        break;
-                    }
-                }
-                Transactions transactions = Transactions.builder()
-                        .userId(id)
-                        .symbol(portfolioRequest.getSymbol())
-                        .transactionPrice(portfolioRequest.getPurchasePrice())
-                        .transactionType("SELL")
-                        .transactionDate(portfolioRequest.getPurchaseDate())
-                        .quantity(portfolioRequest.getQuantity())
-                        .build();
-                transactionRepo.save(transactions);
-                return "Success";
-            }
-        }
-        catch (Exception e){
-            throw new InvalidToken("Invalid Token");
-        }
-
     }
 
     @Override
-    public List<Portfolio> getAllPortfolio(PortfolioRequest portfolioRequest) {
-        int id = tokenRepository.findByToken(portfolioRequest.getToken()).getUserid();
-        return portfolioRepository.findByUserId(id);
+    public List<Portfolio> getAllPortfolio() {
+        String authorizationHeader = request.getHeader("Authorization");
+        String token;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            token = authorizationHeader.substring(7);
+        }
+        else {
+            throw new InvalidToken("Invalid token");
+        }
+        return portfolioRepository.findByUserId(user1Repository.findByEmail(jwtService.extractUsername(token)).get().getId());
+
     }
     @Override
-    public List<Transactions> getAllTransaction(SourceTokenRequest token) {
-        int id = tokenRepository.findByToken(token.getToken()).getUserid();
-        return transactionRepo.findByUserId(id);
+    public List<Transactions> getAllTransaction() {
+        String authorizationHeader = request.getHeader("Authorization");
+        String token;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            token = authorizationHeader.substring(7);
+        }
+        else {
+            throw new InvalidToken("Invalid token");
+        }
+        return transactionRepo.findByUserId(user1Repository.findByEmail(jwtService.extractUsername(token)).get().getId());
     }
     @Override
-    public HashMap<String, TotalValuesResponse> findProfitOrLoss(SourceTokenRequest token, int price) {
+    public HashMap<String, TotalValuesResponse> findProfitOrLoss(int price) {
         HashMap<String, TotalValuesResponse> map = new HashMap<>();
-        int id = tokenRepository.findByToken(token.getToken()).getUserid();
-        List<Portfolio> list = portfolioRepository.findByUserId(id);
+        String authorizationHeader = request.getHeader("Authorization");
+        String token;
+        if (authorizationHeader != null && authorizationHeader.startsWith("Bearer ")) {
+            token = authorizationHeader.substring(7);
+        }
+        else {
+            throw new InvalidToken("Invalid token");
+        }
+        List<Portfolio> list = portfolioRepository.findByUserId(user1Repository.findByEmail(jwtService.extractUsername(token)).get().getId());
         for(Portfolio i : list){
             if(map.containsKey(i.getSymbol())){
 
@@ -138,12 +181,12 @@ public class UserServiceImp implements UserService {
                 totalValuesResponse.setTotalQuantity(totalValuesResponse.getTotalQuantity()+i.getQuantity());
                 totalValuesResponse.setTotalPrice((totalValuesResponse.getTotalPrice()+i.getPurchasePrice()));
 
-                Caluclator c = caluclatePorLAmount(price, totalValuesResponse.getTotalPrice(), totalValuesResponse.getTotalQuantity());
+                Caluclator c = calculateProfitOrLossAmount(price, totalValuesResponse.getTotalPrice(), totalValuesResponse.getTotalQuantity());
                 totalValuesResponse.setPrlAmount(c.getAmount());
                 totalValuesResponse.setProfitOrLoss(c.getPOrLoss());
                 map.put(i.getSymbol(), totalValuesResponse);
             } else {
-                Caluclator c = caluclatePorLAmount( price,  i.getPurchasePrice(),i.getQuantity());
+                Caluclator c = calculateProfitOrLossAmount( price,  i.getPurchasePrice(),i.getQuantity());
                 TotalValuesResponse totalValuesResponse = new TotalValuesResponse( i.getQuantity(),  i.getPurchasePrice(),c.getPOrLoss(),c.getAmount());
                 map.put(i.getSymbol(), totalValuesResponse);
             }
@@ -151,7 +194,7 @@ public class UserServiceImp implements UserService {
         return map;
     }
 
-    private Caluclator caluclatePorLAmount(int price,int totalPrice,int totalQuantity) {
+    private Caluclator calculateProfitOrLossAmount(int price,int totalPrice,int totalQuantity) {
         Caluclator caluclator = new Caluclator();
         if(price*totalQuantity>totalPrice){
             caluclator.setPOrLoss("Profit");

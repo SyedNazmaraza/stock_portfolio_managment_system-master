@@ -6,7 +6,7 @@ spring:
     name: evaluation-task
   datasource:
     username: root
-    url: jdbc:mysql://localhost:3306/evaluation
+    url: jdbc:mysql://localhost:3306/jwt_stock
     password: root
     driver-class-name: com.mysql.jdbc.Driver
   jpa:

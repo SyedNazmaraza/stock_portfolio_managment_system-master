@@ -1,5 +1,6 @@
 package com.springboot.evaluation_task.entity;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -18,9 +19,10 @@ public class Transactions {
 
     @Id
     @GeneratedValue(strategy = GenerationType.AUTO)
-
-    private int id;
-    private  int userId;
+    @JsonIgnore
+    private Integer id;
+    @JsonIgnore
+    private  Integer userId;
     private String symbol;
     private String transactionType;
     private String transactionDate;

@@ -7,15 +7,12 @@ import jakarta.validation.constraints.Positive;
 import lombok.Data;
 @Data
 public class PortfolioRequest {
-
-    @NotBlank(message = "Token Invalid")
-    private String token;
     @NotBlank(message = "symbol Invalid")
     private String symbol;
     @Positive(message = "PurchasePrice Should Not Be Negative")
-    private int purchasePrice;
+    private Integer purchasePrice;
     @NotBlank(message = "purchaseDate Invalid")
     private String purchaseDate;
     @Min(value = 1 ,message = "Quantity Should Not Be Less Than Zero")
-    private int quantity;
+    private Integer quantity;
 }
